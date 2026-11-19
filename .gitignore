@@ -1,0 +1,14 @@
+.gradle/
+.idea/
+local.properties
+build/
+app/build/
+**/*.iml
+captures/
+*.apk
+*.keystore
+*.jks
+*.arca
+!examples/backup-exemplo.arca
+*.pending
+.DS_Store

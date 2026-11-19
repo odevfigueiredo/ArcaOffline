@@ -1,0 +1,10 @@
+BACKUP DE DEMONSTRAÇÃO — ARCA OFFLINE
+
+Arquivo: backup-exemplo.arca
+Senha do arquivo: ExemploArca2026!
+
+Não contém informações pessoais reais. Os dois registros são fictícios.
+No aplicativo, use "Restaurar backup criptografado" e escolha o arquivo.
+Digite a senha acima. Teste buscar, criar um registro e exportar novo backup.
+
+IMPORTANTE: NUNCA use a senha demonstrativa como sua senha pessoal.
