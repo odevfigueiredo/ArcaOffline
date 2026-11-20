@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Nenhuma permissão de INTERNET, câmera ou leitura irrestrita de arquivos. -->
+    <!-- Rede local apenas enquanto o acesso HTTPS estiver ativo no cofre. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"

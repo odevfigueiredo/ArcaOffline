@@ -9,6 +9,11 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -40,12 +45,15 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Inet4Address;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.NumberFormat;
 import java.text.Normalizer;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
@@ -68,6 +76,7 @@ public class MainActivity extends Activity {
     private static final int REQ_BACKUP_EXPORT = 102;
     private static final int REQ_BACKUP_IMPORT = 103;
     private static final int REQ_ATTACHMENT_EXPORT = 104;
+    private static final int REQ_LAN_CERTIFICATE = 105;
     private static final long PICKER_TIMEOUT_MS = 60_000;
     private static final Pattern DIACRITICS = Pattern.compile("\\p{M}+");
     private static final Pattern MIME_TYPE = Pattern.compile("[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+");
@@ -94,6 +103,14 @@ public class MainActivity extends Activity {
     private String currentPage = "locked";
     private AlertDialog activeDialog;
 
+    private LanLocation lanLocation;
+    private LanTls lanIdentity;
+    private LanServer lanServer;
+    private LanVault lanVault;
+    private boolean lanStarting;
+    private TextView lanStatus;
+    private final Runnable monitorLan = this::updateLanStatus;
+
     // Draft data kept only while the editor is open.
     private EditText formTitle, formNotes, formPhone, formDate;
     private Spinner formCategory;
@@ -112,6 +129,11 @@ public class MainActivity extends Activity {
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         storeFile = new File(getFilesDir(), "private.arca");
         showLocked();
+    }
+
+    @Override protected void onPause() {
+        if (lanServer != null || lanStarting) lockAndShow();
+        super.onPause();
     }
 
     @Override protected void onStop() {
@@ -144,6 +166,9 @@ public class MainActivity extends Activity {
 
     private void clearSession() {
         generation++;
+        disconnectLan();
+        lanLocation = null;
+        lanIdentity = null;
         busy = false;
         lockHandler.removeCallbacks(delayedLock);
         pendingPicker = 0;
@@ -348,13 +373,21 @@ public class MainActivity extends Activity {
     }
 
     private void persist(JSONObject data, CryptoBox.Session key, int token) throws Exception {
-        checkCurrent(token);
+        persist(data, key, token, () -> { });
+    }
+
+    private void persist(JSONObject data, CryptoBox.Session key, int token, Runnable checkAccess) throws Exception {
+        Runnable check = () -> {
+            checkCurrent(token);
+            checkAccess.run();
+        };
+        check.run();
         byte[] plain = VaultData.encode(data);
         byte[] encrypted = null;
         try {
-            checkCurrent(token);
+            check.run();
             encrypted = CryptoBox.seal(plain, key);
-            VaultStorage.writeAtomically(storeFile, encrypted, () -> checkCurrent(token));
+            VaultStorage.writeAtomically(storeFile, encrypted, check);
         } finally {
             Arrays.fill(plain, (byte) 0);
             if (encrypted != null) Arrays.fill(encrypted, (byte) 0);
@@ -450,7 +483,7 @@ public class MainActivity extends Activity {
         });
         button(box,"Restaurar backup criptografado",false,v -> pickFile(REQ_BACKUP_IMPORT,"*/*"));
         space(box,9);
-        text(box,"Sem internet • Sem conta • Sem anúncios • Nenhuma permissão de arquivos ampla",12,MUTED,false);
+        text(box,"Uso offline • Sem conta • Sem anúncios",12,MUTED,false);
     }
 
     private void showHome() {
@@ -479,7 +512,9 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0,-2,1); p.setMargins(dp(0),0,dp(6),dp(0)); row.addView(b,p);
         }
         backup.setOnClickListener(v -> showBackup()); settings.setOnClickListener(v -> showSecurity());
-        box.addView(row); space(box,22);
+        box.addView(row);
+        button(box,"Acesso web",false,v -> showLan());
+        space(box,22);
         EditText search = input(box,"Buscar registros","Título, notas, categoria ou telefone",query,false);
         search.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s,int a,int c,int f) {}
@@ -657,7 +692,7 @@ public class MainActivity extends Activity {
         String count = NumberFormat.getIntegerInstance(Locale.forLanguageTag("pt-BR")).format(session.iterations());
         text(info,"A chave do cofre é derivada da senha com PBKDF2-HMAC-SHA256 (" + count + " iterações). Cada gravação usa um nonce aleatório novo.",13,MUTED,false);
         space(info,10);
-        text(info,"Sem servidores • Sem conta • Sem anúncios • Sem permissão de internet • Capturas de tela bloqueadas",12,RED,true);
+        text(info,"Cofre no celular • Acesso web opcional na rede local • Capturas de tela bloqueadas",12,RED,true);
         button(box,"Alterar senha principal",true,v -> changePassword());
         button(box,"Exportar backup",false,v -> showBackup());
         button(box,"Bloquear agora",false,v -> lockAndShow());
@@ -771,12 +806,12 @@ public class MainActivity extends Activity {
 
     private String mimeOf(JSONObject record) { return safeMime(property(record, "attachmentMime")); }
 
-    private static String safeMime(String mime) {
+    static String safeMime(String mime) {
         if (mime == null || mime.length() > 255 || !MIME_TYPE.matcher(mime).matches()) return "application/octet-stream";
         return mime.toLowerCase(Locale.ROOT);
     }
 
-    private static String safeName(String raw) {
+    static String safeName(String raw) {
         if (raw == null) return "arquivo";
         String clean = FILE_NAME_DISALLOWED.matcher(raw).replaceAll("_").trim();
         if (clean.isEmpty() || clean.equals(".") || clean.equals("..")) return "arquivo";
@@ -862,6 +897,9 @@ public class MainActivity extends Activity {
                 break;
             case REQ_BACKUP_IMPORT:
                 askRestorePassword(uri);
+                break;
+            case REQ_LAN_CERTIFICATE:
+                if (lanIdentity != null && "lan".equals(currentPage) && lanServer == null) exportLanCertificate(uri);
                 break;
             case REQ_ATTACHMENT_EXPORT:
                 if (session != null && attachment != null) exportAttachment(uri, attachment);
@@ -1016,8 +1054,228 @@ public class MainActivity extends Activity {
         }, failure -> error("Falha na restauração", "Não foi possível gravar o backup. O cofre atual foi preservado."), OpenVault::discard);
     }
 
+    private void showLan() {
+        currentPage = "lan";
+        recordList = null;
+        LinearLayout box = begin("REDE LOCAL", "Acesso web", true);
+        if (lanServer != null) {
+            showLanActive(box);
+            return;
+        }
+        text(box, "Gerencie o cofre pelo navegador de outro dispositivo na mesma rede Wi-Fi ou Ethernet.", 15, WHITE, false);
+        space(box, 16);
+        if (lanIdentity != null && isLanAvailable(lanLocation)) {
+            text(box, "Endereço do celular • " + lanLocation.address.getHostAddress(), 15, WHITE, true);
+            space(box, 9);
+            text(box, "Salve o certificado público, confira sua impressão digital e instale-o no navegador ou no dispositivo que vai acessar o cofre.", 14, MUTED, false);
+            space(box, 9);
+            TextView fingerprint = label("SHA-256\n" + lanIdentity.certificateSha256(), 12, WHITE, false);
+            fingerprint.setTextIsSelectable(true);
+            box.addView(fingerprint);
+            space(box, 8);
+            button(box, "Salvar certificado público", false,
+                    view -> pickSave(REQ_LAN_CERTIFICATE, "application/x-x509-ca-cert", "Arca-Offline-LAN.crt"));
+            button(box, "Ativar acesso HTTPS", true, view -> startLan());
+            button(box, "Escolher outra rede", false, view -> {
+                lanLocation = null;
+                lanIdentity = null;
+                showLan();
+            });
+            return;
+        }
+
+        lanLocation = null;
+        lanIdentity = null;
+        List<LanLocation> available = localAddresses();
+        if (available.isEmpty()) {
+            text(box, "Conecte o celular a uma rede Wi-Fi ou Ethernet com endereço IPv4 privado.", 14, MUTED, false);
+            button(box, "Procurar redes novamente", false, view -> showLan());
+            return;
+        }
+        ArrayAdapter<LanLocation> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, available);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        Spinner networks = new Spinner(this);
+        networks.setAdapter(adapter);
+        networks.setContentDescription("Endereço de rede local");
+        networks.setBackground(bg(PANEL2, 10));
+        box.addView(networks, lp(-1, 50));
+        space(box, 12);
+        button(box, "Preparar acesso HTTPS", true, view -> {
+            LanLocation selected = (LanLocation) networks.getSelectedItem();
+            runWork("Preparando certificado local", token -> {
+                checkCurrent(token);
+                return LanTls.create(this, selected.address);
+            }, identity -> {
+                lanLocation = selected;
+                lanIdentity = identity;
+                showLan();
+            }, failure -> error("Falha no certificado", "Confira o relógio do celular e tente preparar o acesso novamente."));
+        });
+    }
+
+    private void showLanActive(LinearLayout box) {
+        LinearLayout connection = panel(box);
+        text(connection, "Abra este endereço no navegador", 16, WHITE, true);
+        space(connection, 8);
+        TextView url = label(lanServer.origin(), 18, WHITE, true);
+        url.setTextIsSelectable(true);
+        connection.addView(url);
+        space(connection, 15);
+        lanStatus = label("", 18, RED, true);
+        lanStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        connection.addView(lanStatus);
+        space(connection, 8);
+        text(connection, "Use o código uma vez. A senha principal fica no celular.", 14, MUTED, false);
+        text(box, "Mantenha esta tela aberta. O acesso fecha ao sair, bloquear o cofre, trocar de rede ou atingir o prazo da sessão.", 14, MUTED, false);
+        space(box, 9);
+        button(box, "Encerrar acesso web", true, view -> endLan(false, "Acesso web encerrado."));
+        updateLanStatus();
+    }
+
+    private void startLan() {
+        if (busy || !isLanAvailable(lanLocation)) {
+            showLan();
+            return;
+        }
+        LanLocation location = lanLocation;
+        LanTls identity = lanIdentity;
+        CryptoBox.Session key = session;
+        int token = generation;
+        LanVault remote = new LanVault(STORAGE_WORKER, vault, storeFile.toPath(),
+                (data, allowed) -> persist(data, key, token, allowed));
+        lanStarting = true;
+        runWork("Ativando acesso local", workToken -> {
+            checkCurrent(workToken);
+            return LanServer.start(getApplicationContext(), location.address, identity.context(), remote,
+                    () -> lockHandler.post(() -> {
+                        if (lanVault == remote) endLan(false, "A sessão do navegador terminou.");
+                    }));
+        }, server -> {
+            lanStarting = false;
+            lanVault = remote;
+            lanServer = server;
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            showLan();
+        }, failure -> {
+            lanStarting = false;
+            remote.revoke();
+            error("Acesso web indisponível", "Confira se o celular ainda está conectado à rede selecionada.");
+        }, abandoned -> {
+            remote.revoke();
+            abandoned.close();
+        });
+    }
+
+    private void updateLanStatus() {
+        lockHandler.removeCallbacks(monitorLan);
+        LanServer server = lanServer;
+        if (server == null) return;
+        if (!server.isRunning() || !isLanAvailable(lanLocation)) {
+            endLan(false, "A conexão local terminou.");
+            return;
+        }
+        String code = server.pairingCode();
+        String status = code == null ? "Navegador pareado" : "Código de pareamento\n" + code;
+        if (lanStatus != null && !status.contentEquals(lanStatus.getText())) lanStatus.setText(status);
+        lockHandler.postDelayed(monitorLan, 1_000);
+    }
+
+    private LanVault disconnectLan() {
+        lockHandler.removeCallbacks(monitorLan);
+        LanVault remote = lanVault;
+        LanServer server = lanServer;
+        lanVault = null;
+        lanServer = null;
+        lanStarting = false;
+        lanStatus = null;
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (remote != null) remote.revoke();
+        if (server != null) server.close();
+        return remote;
+    }
+
+    private void endLan(boolean back, String message) {
+        LanVault stopped = disconnectLan();
+        if (stopped == null) {
+            showHome();
+            return;
+        }
+        // Let an already-authorized atomic write finish before exposing native editing again.
+        runWork("Encerrando acesso web", token -> {
+            checkCurrent(token);
+            return stopped.settledData();
+        }, settled -> {
+            vault = settled;
+            if (back) showHome();
+            else showLan();
+            if (message != null) toast(message);
+        }, failure -> lockAndShow());
+    }
+
+    private void exportLanCertificate(Uri uri) {
+        byte[] certificate = lanIdentity.certificateDer();
+        runDocumentWork("Salvando certificado público", token -> {
+            checkCurrent(token);
+            try (OutputStream output = openDestination(uri)) {
+                output.write(certificate);
+            }
+            return null;
+        }, unused -> toast("Certificado público salvo."),
+                failure -> error("Falha ao salvar", "Escolha um destino local disponível."));
+    }
+
+    private boolean isLanAvailable(LanLocation location) {
+        if (location == null) return false;
+        for (LanLocation available : localAddresses()) {
+            if (location.network.equals(available.network) && location.address.equals(available.address)) return true;
+        }
+        return false;
+    }
+
+    private List<LanLocation> localAddresses() {
+        ConnectivityManager connectivity = getSystemService(ConnectivityManager.class);
+        List<LanLocation> locations = new ArrayList<>();
+        if (connectivity == null) return locations;
+        for (Network network : connectivity.getAllNetworks()) {
+            NetworkCapabilities capabilities = connectivity.getNetworkCapabilities(network);
+            if (capabilities == null || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue;
+            boolean wifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+            boolean ethernet = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET);
+            if (!wifi && !ethernet) continue;
+            LinkProperties properties = connectivity.getLinkProperties(network);
+            if (properties == null) continue;
+            for (LinkAddress link : properties.getLinkAddresses()) {
+                if (link.getAddress() instanceof Inet4Address) {
+                    Inet4Address address = (Inet4Address) link.getAddress();
+                    if (LanTls.isPrivateAddress(address)) locations.add(new LanLocation(network, address, wifi));
+                }
+            }
+        }
+        return locations;
+    }
+
+    private static final class LanLocation {
+        final Network network;
+        final Inet4Address address;
+        final boolean wifi;
+
+        LanLocation(Network network, Inet4Address address, boolean wifi) {
+            this.network = network;
+            this.address = address;
+            this.wifi = wifi;
+        }
+
+        @Override public String toString() {
+            return (wifi ? "Wi-Fi • " : "Ethernet • ") + address.getHostAddress();
+        }
+    }
+
     private void leavePage() {
         if (session == null || busy) return;
+        if ("lan".equals(currentPage)) {
+            endLan(true, null);
+            return;
+        }
         if (unsavedChanges != null && unsavedChanges.getAsBoolean()) {
             showDialog(new AlertDialog.Builder(this).setTitle("Descartar alterações?")
                     .setMessage("As alterações do registro ainda não foram gravadas no cofre.")

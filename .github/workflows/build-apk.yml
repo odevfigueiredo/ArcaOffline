@@ -33,14 +33,16 @@ jobs:
       - name: Instalar plataforma Android 35
         run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
 
-      - name: Verificar criptografia e armazenamento local
+      - name: Verificar criptografia, armazenamento e certificados
         run: |
           mkdir -p build/checks
           javac --release 17 -encoding UTF-8 -d build/checks \
             app/src/main/java/br/com/arca/offline/CryptoBox.java \
+            app/src/main/java/br/com/arca/offline/LanCertificates.java \
             app/src/main/java/br/com/arca/offline/VaultStorage.java \
-            tests/CryptoBoxTest.java tests/VaultStorageTest.java
+            tests/CryptoBoxTest.java tests/LanCertificatesTest.java tests/VaultStorageTest.java
           java -cp build/checks CryptoBoxTest
+          java -cp build/checks br.com.arca.offline.LanCertificatesTest
           java -cp build/checks br.com.arca.offline.VaultStorageTest
 
       - name: Compilar e verificar APK
@@ -53,8 +55,10 @@ jobs:
           "$tools/apksigner" verify "$apk"
           permissions=$("$tools/aapt2" dump permissions "$apk")
           printf '%s\n' "$permissions"
-          if grep -q 'uses-permission' <<< "$permissions"; then
-            echo 'Falha: APK declara uma permissão não esperada.' >&2
+          actual=$(sed -n "s/^uses-permission: name='\([^']*\)'.*$/\1/p" <<< "$permissions" | sort)
+          expected=$(printf '%s\n' android.permission.ACCESS_NETWORK_STATE android.permission.INTERNET)
+          if [[ "$actual" != "$expected" ]]; then
+            echo 'Falha: permissões do APK divergiram do acesso local previsto.' >&2
             exit 1
           fi
 

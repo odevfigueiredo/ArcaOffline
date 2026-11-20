@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="referrer" content="no-referrer">
+    <title>Arca Offline · Cofre digital</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+</head>
+<body>
+    <a class="skip-link" href="#pair-code" id="skip-link">Ir para o conteúdo</a>
+
+    <main class="pair-shell" id="pair-view">
+        <section class="pair-panel" aria-labelledby="pair-title">
+            <span class="brand"><i class="brand-mark" aria-hidden="true"></i>Arca<span>Offline</span></span>
+            <div class="pair-copy">
+                <p class="connection"><span class="connection-dot"></span> Acesso pela rede local</p>
+                <h1 id="pair-title">Abra seu cofre<br> no navegador.</h1>
+                <p>No celular, abra a Arca Offline, ative o acesso pelo navegador e informe o código exibido.</p>
+                <form id="pair-form">
+                    <label for="pair-code">Código de pareamento</label>
+                    <input id="pair-code" name="code" type="text" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="31"
+                        autocomplete="off" spellcheck="false" autocapitalize="characters" required aria-describedby="pair-feedback">
+                    <p id="pair-feedback" class="form-feedback" aria-live="polite">Verificando a sessão…</p>
+                    <button class="button button-primary pair-submit" type="submit" id="pair-submit" disabled>
+                        Conectar ao cofre <span aria-hidden="true">→</span>
+                    </button>
+                </form>
+            </div>
+            <p class="pair-footer"><i class="icon icon-lock" aria-hidden="true"></i> Pareamento autorizado no celular</p>
+        </section>
+        <div class="pair-visual" aria-hidden="true"></div>
+    </main>
+
+    <div class="dashboard" id="dashboard" hidden>
+        <aside class="sidebar" aria-label="Painel do cofre">
+            <span class="brand"><i class="brand-mark" aria-hidden="true"></i>Arca<span>Offline</span></span>
+            <nav class="section-nav" aria-label="Seções do cofre">
+                <button class="nav-item" type="button" data-view="records" aria-current="page">
+                    <i class="icon icon-grid" aria-hidden="true"></i> Registros
+                </button>
+                <button class="nav-item" type="button" data-view="backup">
+                    <i class="icon icon-download" aria-hidden="true"></i> Backup
+                </button>
+            </nav>
+            <div class="sidebar-categories">
+                <h2>Categorias</h2>
+                <nav id="category-nav" aria-label="Filtrar registros por categoria"></nav>
+            </div>
+            <div class="sidebar-status">
+                <span class="status-icon"><i class="icon icon-lock" aria-hidden="true"></i></span>
+                <div><strong>Sessão local</strong><span>Autorizada no celular</span></div>
+            </div>
+        </aside>
+        <main class="workspace" id="workspace" tabindex="-1">
+            <header class="workspace-header">
+                <span class="brand mobile-brand"><i class="brand-mark" aria-hidden="true"></i>Arca<span>Offline</span></span>
+                <p class="path"><span>Cofre</span><span aria-hidden="true">/</span><strong id="section-name">Registros</strong></p>
+                <div class="header-controls">
+                    <p class="connection"><span class="connection-dot"></span> Conectado</p>
+                    <button type="button" class="button button-quiet" id="logout"><i class="icon icon-exit" aria-hidden="true"></i> Encerrar sessão</button>
+                </div>
+            </header>
+            <nav class="mobile-nav" aria-label="Seções do cofre">
+                <button class="nav-item" type="button" data-view="records" aria-current="page">Registros</button>
+                <button class="nav-item" type="button" data-view="backup">Backup</button>
+            </nav>
+            <p class="notice" id="dashboard-notice" role="status" hidden></p>
+
+            <section id="records-view" aria-labelledby="dashboard-title">
+                <div class="hero">
+                    <div class="hero-copy">
+                        <h1 id="dashboard-title">Seu cofre digital</h1>
+                        <p>Documentos, contatos e informações essenciais da sua família, em um só lugar.</p>
+                        <button type="button" class="button button-primary" id="new-record"><span class="plus" aria-hidden="true">+</span> Novo registro</button>
+                    </div>
+                </div>
+
+                <div class="metrics" aria-label="Resumo do cofre">
+                    <button type="button" class="metric" id="all-records" aria-pressed="true">
+                        <span class="metric-icon metric-icon-blue"><i class="icon icon-file" aria-hidden="true"></i></span>
+                        <span><span class="metric-label">Registros protegidos</span><strong id="count-all">0</strong></span>
+                    </button>
+                    <button type="button" class="metric" id="attached-records" aria-pressed="false">
+                        <span class="metric-icon metric-icon-teal"><i class="icon icon-clip" aria-hidden="true"></i></span>
+                        <span><span class="metric-label">Com anexo</span><strong id="count-attached">0</strong></span>
+                    </button>
+                    <div class="metric">
+                        <span class="metric-icon metric-icon-red"><i class="icon icon-grid" aria-hidden="true"></i></span>
+                        <span><span class="metric-label">Categorias em uso</span><strong id="count-categories">0</strong></span>
+                    </div>
+                </div>
+
+                <section class="record-panel" aria-labelledby="records-title" id="records-panel">
+                    <div class="table-heading">
+                        <div class="table-title"><h2 id="records-title">Registros</h2><span id="record-count" class="table-count" aria-live="polite"></span></div>
+                        <div class="table-controls">
+                            <label class="sr-only" for="category-filter">Categoria</label>
+                            <select id="category-filter" class="mobile-filter" aria-label="Filtrar categoria"></select>
+                            <label class="search" for="record-search">
+                                <i class="icon icon-search" aria-hidden="true"></i>
+                                <span class="sr-only">Buscar registros</span>
+                                <input id="record-search" type="search" placeholder="Buscar no cofre" autocomplete="off" spellcheck="false">
+                            </label>
+                            <button class="button button-quiet refresh" id="refresh-records" type="button" title="Atualizar registros" aria-label="Atualizar registros">
+                                <span aria-hidden="true">↻</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="records-scroll" id="records-scroll" hidden>
+                        <table class="records-table">
+                            <thead>
+                                <tr><th scope="col">Registro</th><th scope="col">Categoria</th><th scope="col">Data importante</th>
+                                    <th scope="col">Anexo</th><th scope="col"><span class="sr-only">Ações</span></th></tr>
+                            </thead>
+                            <tbody id="record-rows"></tbody>
+                        </table>
+                    </div>
+                    <div class="list-status" id="list-status" aria-live="polite">
+                        <span class="status-symbol"><i class="icon icon-file" aria-hidden="true"></i></span>
+                        <h3 id="list-title">Carregando registros…</h3>
+                        <p id="list-description"></p>
+                        <button type="button" class="button button-quiet" id="list-action" hidden></button>
+                    </div>
+                </section>
+            </section>
+
+            <section class="backup-view" id="backup-view" aria-labelledby="backup-title" hidden>
+                <div class="backup-header">
+                    <span class="status-symbol"><i class="icon icon-download" aria-hidden="true"></i></span>
+                    <h1 id="backup-title">Backup criptografado</h1>
+                    <p>Baixe uma cópia dos registros e anexos do cofre para guardar em outro local.</p>
+                </div>
+                <div class="backup-card">
+                    <div class="backup-file">
+                        <span class="metric-icon metric-icon-red"><i class="icon icon-file" aria-hidden="true"></i></span>
+                        <div><h2>Arquivo .arca</h2><p>Para restaurar a cópia pelo celular, use a senha principal que valia na data do backup.</p></div>
+                    </div>
+                    <button type="button" class="button button-primary" id="backup-download"><i class="icon icon-download" aria-hidden="true"></i> Baixar backup</button>
+                    <p id="backup-feedback" class="form-feedback" aria-live="polite"></p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <dialog id="record-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
+        <div class="dialog-card">
+            <header class="dialog-header">
+                <div><h2 id="dialog-title"></h2><p id="dialog-description"></p></div>
+                <button type="button" class="button button-quiet icon-button" id="close-dialog" aria-label="Fechar">×</button>
+            </header>
+            <div id="record-detail" hidden>
+                <dl id="detail-fields" class="detail-fields"></dl>
+                <div id="detail-attachment" class="detail-attachment" hidden>
+                    <i class="icon icon-clip" aria-hidden="true"></i><strong id="attachment-name"></strong>
+                    <button type="button" class="button button-quiet" id="view-attachment" hidden>Ver anexo</button>
+                    <button type="button" class="button button-quiet" id="download-attachment">Baixar anexo</button>
+                    <div id="attachment-preview" hidden></div>
+                    <p id="attachment-feedback" class="form-feedback" aria-live="polite"></p>
+                </div>
+                <div class="dialog-actions">
+                    <button type="button" class="button button-danger" id="delete-record">Excluir</button>
+                    <button type="button" class="button button-primary" id="edit-record">Editar registro</button>
+                </div>
+            </div>
+            <form id="record-form" autocomplete="off" hidden>
+                <div class="form-grid">
+                    <div class="form-field wide"><label for="record-title">Título</label>
+                        <input id="record-title" name="title" maxlength="120" spellcheck="false" required></div>
+                    <div class="form-field"><label for="record-category">Categoria</label>
+                        <select id="record-category" name="category" required></select></div>
+                    <div class="form-field"><label for="record-date">Data importante <small>opcional</small></label>
+                        <input type="date" id="record-date" name="date" min="0001-01-01" max="9999-12-31"></div>
+                    <div class="form-field wide"><label for="record-phone">Telefone <small>opcional</small></label>
+                        <input type="tel" id="record-phone" name="phone" maxlength="120"></div>
+                    <div class="form-field wide"><label for="record-notes">Notas <small>opcional</small></label>
+                        <textarea id="record-notes" name="notes" rows="5" maxlength="5000" spellcheck="false"></textarea></div>
+                </div>
+                <p id="record-feedback" class="form-feedback" aria-live="polite"></p>
+                <div class="dialog-actions">
+                    <button type="button" class="button button-quiet" id="cancel-edit">Cancelar</button>
+                    <button type="submit" class="button button-primary" id="save-record">Salvar registro</button>
+                </div>
+            </form>
+            <div id="delete-confirm" hidden>
+                <p class="delete-copy">O registro e seu anexo serão removidos do cofre atual. Backups anteriores podem guardar uma cópia.</p>
+                <p id="delete-feedback" class="form-feedback" aria-live="polite"></p>
+                <div class="dialog-actions">
+                    <button type="button" class="button button-quiet" id="cancel-delete">Cancelar</button>
+                    <button type="button" class="button button-primary" id="confirm-delete">Excluir registro</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+</body>
+</html>

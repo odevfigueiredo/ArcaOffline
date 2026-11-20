@@ -18,4 +18,8 @@ A senha é pedida no aplicativo e a chave é mantida durante a sessão. O aplica
 
 ## Limites de proteção
 
-Use uma frase-senha exclusiva. O aplicativo não tem conta, servidor ou recuperação de senha. A integridade do Android, as atualizações de segurança e o teclado do aparelho também afetam a privacidade com o cofre aberto. A aplicação passou por testes de implementação. A auditoria independente permanece pendente.
+Use uma frase-senha exclusiva. O cofre usa uma senha principal local. A recuperação depende da senha correspondente ao arquivo de backup. A integridade do Android, as atualizações de segurança e o teclado do aparelho também afetam a privacidade com o cofre aberto. A aplicação passou por testes de implementação. A auditoria independente permanece pendente.
+
+## Sessões pelo navegador
+
+O cofre só atende ao navegador durante uma sessão HTTPS iniciada pelo usuário no Android. A autoridade da instalação é exportada para conferência e instalação explícita no cliente. Use um navegador de confiança, especialmente para abrir ou salvar anexos. O término da sessão fecha o servidor e limpa o painel. Arquivos já baixados continuam sob responsabilidade do usuário. [Guia de acesso web](ACESSO_WEB.md)

@@ -71,13 +71,16 @@ public final class ArcaSmokeInstrumentation extends Instrumentation {
                     Settings.Global.AIRPLANE_MODE_ON, 0) == 1, "Ative o modo avião no emulador de testes.");
             String[] permissions = context.getPackageManager().getPackageInfo(
                     context.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
-            require(permissions == null || permissions.length == 0, "O aplicativo declarou permissões.");
+            require(permissions != null && permissions.length == 2
+                    && Arrays.asList(permissions).containsAll(Arrays.asList(
+                            android.Manifest.permission.INTERNET, android.Manifest.permission.ACCESS_NETWORK_STATE)),
+                    "O APK declara permissões além do acesso web local.");
             automation = getUiAutomation();
             Intent launch = new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity = (MainActivity) startActivitySync(launch);
             require(onMain(() -> (activity.getWindow().getAttributes().flags
                     & WindowManager.LayoutParams.FLAG_SECURE) != 0), "Janela sem FLAG_SECURE.");
-            passed("Modo avião, aplicativo sem permissões e janela protegida");
+            passed("Modo avião, permissões restritas à rede local e janela protegida");
             if (pdfOnly) {
                 byte[] sample = samplePdf();
                 onMain(() -> PdfPreview.show(activity, "Teste de PDF", sample));
